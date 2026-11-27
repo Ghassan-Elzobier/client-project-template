@@ -1,0 +1,34 @@
+name: Feature
+description: Something the agreed scope says the app should do. Written so Claude can build it (mention @claude to start).
+labels: [feature]
+body:
+  - type: input
+    id: scope
+    attributes:
+      label: Which line of the agreed scope does this build?
+      description: Quote it from PROJECT.md ("Agreed scope"). Nothing there covers it? Use a change request instead.
+      placeholder: "First version: people can search for a term and see it in every language"
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What should be true when this is done?
+      description: The outcome, from the side of the people who use the app. One or two sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: How will we know it works?
+      description: Checks a test can make. These become the end-to-end, unit or database tests.
+      placeholder: |
+        - Typing part of a word lists every entry that contains it, in under a second.
+        - It fits at 360 px.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: The design screen, the client's words for things, constraints. Never paste the client's real data here.

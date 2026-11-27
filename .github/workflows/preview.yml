@@ -1,0 +1,75 @@
+# A preview of every pull request on Cloudflare: the Worker build, uploaded as a
+# version of the preview Worker, at an address that stays the same for the pull
+# request (pr-<number>-<worker>-preview.<account>.workers.dev). The owner decides
+# whether and when the client sees it. Previews use the preview database
+# (PREVIEW_SUPABASE_URL) and made-up data, never the live site's.
+#
+# A pull request that changes the database: the preview database gets the change
+# only after the merge (release.yml, Staging), so the comment warns that parts of
+# that preview may not work until then. CI tests the migration on a local
+# database either way.
+#
+# Skipped until the repository variable CLOUDFLARE_ACCOUNT_ID is set
+# (docs/SETUP.md), and for Dependabot (its runs get no secrets) and forks.
+name: Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    name: Preview on Cloudflare
+    if: >-
+      vars.CLOUDFLARE_ACCOUNT_ID != '' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.PREVIEW_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.PREVIEW_SUPABASE_ANON_KEY }}
+      NEXT_TELEMETRY_DISABLED: "1"
+      WRANGLER_SEND_METRICS: "false"
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Build the Worker
+        run: npx opennextjs-cloudflare build
+      - name: Create the preview Worker the first time (later merges replace it with main)
+        run: |
+          if ! npx wrangler deployments list --env preview >/dev/null 2>&1; then
+            npx opennextjs-cloudflare deploy --env preview
+          fi
+      - name: Upload this pull request's version
+        id: upload
+        run: |
+          set -o pipefail
+          npx opennextjs-cloudflare upload --env preview --preview-alias "pr-$PR" 2>&1 | tee upload.log
+          url=$(grep -oE "https://pr-$PR-[A-Za-z0-9.-]+\.workers\.dev" upload.log | head -1 || true)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Say where the preview is
+        run: node scripts/preview-comment.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ steps.upload.outputs.url }}
+          HEAD: ${{ github.event.pull_request.head.sha }}

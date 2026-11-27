@@ -1,0 +1,7 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["scripts/*.{mjs,ts}", "src/**/*.test.ts", "e2e/**/*.ts", "open-next.config.ts"],
+  "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{mjs,ts}", "e2e/**/*.ts"],
+  "ignoreExportsUsedInFile": true,
+  "ignoreDependencies": []
+}

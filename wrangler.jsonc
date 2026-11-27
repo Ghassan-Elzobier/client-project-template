@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // The production Worker. scripts/new-client.sh renames it after the project;
+  // the preview environment below becomes "<name>-preview".
+  "name": "client-app",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  "observability": { "enabled": true },
+  // Settings the server reads at run time. Keys are never here: `wrangler secret put`.
+  "vars": { "APP_ENV": "production" },
+  // No preview links on the live Worker: they would share its data.
+  "preview_urls": false,
+  "env": {
+    // The staging site (main, after each merge) and one preview link per pull
+    // request (pr-<number>), all on their own Worker and their own database.
+    "preview": {
+      "vars": { "APP_ENV": "preview" },
+      "preview_urls": true,
+    },
+  },
+}

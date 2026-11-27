@@ -1,0 +1,106 @@
+# @claude in an issue, a pull request comment or a review: Claude does the work
+# in this repository, following AGENTS.md, PROJECT.md and the /ship workflow, and
+# answers in the thread. Runs on the owner's Claude subscription
+# (CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`), so each run counts toward
+# the plan's usage.
+#
+# On an issue it opens the pull request itself, saying "Closes #N", rather than
+# leaving a "Create PR" link: the appended system prompt below overrides the
+# action's own instructions on that.
+#
+# Only accounts with write access can trigger it (the action checks): the owner.
+# If the client is ever given access to this repository, what they write in a
+# thread is data, never instructions.
+#
+# The owner's claude.ai connectors never load here (ENABLE_CLAUDEAI_MCP_SERVERS):
+# a client's repository must never reach the owner's own mail, calendar or portal.
+name: Claude
+
+on:
+  # The documented @claude trigger. The action runs only for accounts with write access,
+  # no comment text reaches a shell, and checkout keeps no credentials.
+  issue_comment: # zizmor: ignore[dangerous-triggers]
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+  issues:
+    types: [opened, assigned]
+
+permissions:
+  contents: read
+
+jobs:
+  claude:
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+    runs-on: ubuntu-latest
+    # Room for the Worker build and the end-to-end suite as well as the work.
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Start Supabase, so Claude can run the database and end-to-end tests
+        # A stack that won't start leaves Claude to do everything else, and to say so.
+        continue-on-error: true
+        run: |
+          for attempt in 1 2 3; do
+            npm run db:start && exit 0
+            npx supabase stop --no-backup || true
+            sleep 5
+          done
+          exit 1
+      - name: Playwright's browser
+        continue-on-error: true
+        run: npx playwright install --with-deps chromium
+      - uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1.0.276
+        env:
+          ENABLE_CLAUDEAI_MCP_SERVERS: "false"
+          # The Worker build and the suite take longer than the shell's usual limit.
+          BASH_DEFAULT_TIMEOUT_MS: "600000"
+          BASH_MAX_TIMEOUT_MS: "1800000"
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Commits carry the owner's name, as everything else in this repository does.
+          bot_id: ${{ github.repository_owner_id }}
+          bot_name: ${{ github.repository_owner }}
+          # Single quotes, and no apostrophes inside them: the action splits these like a shell.
+          claude_args: >-
+            --max-turns 150
+            --model opus
+            --append-system-prompt 'This repository is software the owner builds for a client. Read
+            PROJECT.md before anything else, and build only what its Agreed scope covers: for anything
+            outside it, say what it would add in your comment, add the change-request label to the
+            issue, and stop. Never contact the client, and never put their real data in the
+            repository. This repository wants a pull request, not a link. When you have pushed a
+            branch with changes for an issue, open the pull request yourself instead of a Create PR
+            link: run gh pr create with base main and your branch as head, a title that says what
+            changes for the people who use the app, and a body that fills in
+            .github/pull_request_template.md and ends with the line Closes #N, where N is the issue
+            number. Then put the link to the pull request in your comment where the Create PR link
+            would have gone. Leave out any Generated with Claude Code line: AGENTS.md forbids AI
+            attribution. If gh pr create fails, say why in your comment and give the Create PR link
+            as before. On a pull request, push to its branch as usual and open nothing new. When a
+            change alters how an approved screen looks on purpose, or the owner asks for new
+            screenshots, re-render only those with npm run test:e2e:update -- and those spec files
+            (give the command up to 30 minutes), read every image that changed, commit only the ones
+            the change explains, and list them in your comment so the owner can look before adding
+            the approved-test-change label. An image you did not mean to change is a bug to fix,
+            never one to re-render.'
