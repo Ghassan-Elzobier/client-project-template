@@ -1,0 +1,56 @@
+# Local Supabase settings. Hosted auth settings are pushed with
+# `supabase config push` after `supabase link` (docs/SETUP.md).
+# scripts/rename-project.mjs names the project and moves its ports.
+project_id = "client-app"
+
+# Ports sit in 564xx: away from the 543xx defaults, in a block of their own, so
+# the local stacks of different projects run side by side.
+
+[api]
+enabled = true
+port = 56421
+# `app` is deliberately absent: it is reached only through public RPCs.
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 56422
+shadow_port = 56420
+major_version = 17
+
+[db.migrations]
+enabled = true
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[studio]
+enabled = true
+port = 56423
+
+# Catches sign-in emails locally (Mailpit).
+[local_smtp]
+enabled = true
+port = 56424
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+# 3100 is the end-to-end suite's server (playwright.config.ts).
+additional_redirect_urls = ["http://localhost:3000/auth/callback", "http://localhost:3100/auth/callback"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+# Nobody signs themselves up: an admin invites people from the Supabase
+# dashboard and gives them a role (docs/SETUP.md).
+enable_signup = false
+
+[auth.email]
+enabled = true
+enable_confirmations = false
+otp_length = 6
+otp_expiry = 3600
+
+[analytics]
+enabled = false

@@ -1,0 +1,28 @@
+name: Change request
+description: Something outside the agreed scope. Nothing is built until the owner agrees it with the client and adds "scope-approved".
+labels: [change-request]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What would change?
+      description: The new outcome, or how agreed work would behave differently.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why, and who asked?
+      description: The client's reason, or the owner's. A first name is enough.
+    validations:
+      required: true
+  - type: textarea
+    id: cost
+    attributes:
+      label: What it touches
+      description: Screens, data, milestones and dates it would move. Claude can fill this in when asked (mention @claude).
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Never paste the client's real data here.

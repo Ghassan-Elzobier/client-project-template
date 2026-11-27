@@ -1,0 +1,32 @@
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+
+# Settings and keys stay on the machine: GitHub environments and Cloudflare hold the live ones.
+.env
+.env*.local
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+# The Cloudflare build (OpenNext) and Wrangler's local state.
+.open-next/
+.wrangler/
+
+supabase/.temp/
+supabase/.branches/
+
+e2e/.auth/
+playwright-report/
+test-results/
+.claude/worktrees/
+
+# What a review run is asked to read (scripts/review.mjs brief); rebuilt every run.
+.review/
+
+# The client's own files (spreadsheets, documents) never go in the repository.
+# Loaders read them from a path given when they run; keep them here or outside.
+client-files/

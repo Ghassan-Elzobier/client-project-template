@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+/*
+ * The client's design tokens. These values are neutral placeholders: replace
+ * them with the client's brand (PROJECT.md, "Design") before the first page is
+ * built, and keep the names, so every component follows. The linter rejects raw
+ * hex colours, one-off font sizes and raw greys for text (eslint.config.mjs).
+ * Text and its background meet WCAG AA contrast (4.5:1) in every pairing used.
+ */
+@theme {
+  /* Surfaces */
+  --color-canvas: #ffffff;
+  --color-surface: #f4f6f8;
+  --color-line: #ccd2d9;
+
+  /* Text roles: ink to read, ink-muted for what supports it. */
+  --color-ink: #1b1f24;
+  --color-ink-muted: #545c66;
+
+  /* The brand colour, for the main action, and the text that sits on it. */
+  --color-brand: #1d4ed8;
+  --color-brand-ink: #ffffff;
+
+  /* Meanings. Always backed by a word, never colour alone. */
+  --color-danger: #b42318;
+  --color-success: #067647;
+  --color-focus: #1d4ed8;
+
+  /* Self-hosted type only: the browser never calls a font service. When the
+     brand has a typeface, load it with next/font/local and set it here. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+}

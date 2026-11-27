@@ -1,0 +1,22 @@
+name: Bug
+description: Something that works differently from how it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to see it
+      description: The site (live, staging or a preview), the page, the device and screen size, and the taps that lead there.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Describe the data rather than pasting it; never paste the client's real records here.

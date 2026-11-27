@@ -1,0 +1,158 @@
+# The way to the live site, in two steps, so nothing reaches the client's users
+# before the client has said yes.
+#
+#   Staging     every merge to main, on its own: new migrations go to the preview
+#               database, and main goes up on the preview Worker's own address
+#               (the staging site), where the client can try what was merged.
+#   Production  only when the owner runs this workflow by hand on main ("Run
+#               workflow", saying what the client accepted), and only if CI passed
+#               on that commit: a backup of the live data (encrypted to
+#               BACKUP_PUBLIC_KEY), the migrations, the Worker, then a check that
+#               the live site answers. A failed backup or migration stops it
+#               before the Worker changes, so the old version keeps serving.
+#
+# Why a manual run and not an approval: GitHub's environment approvals work in
+# private repositories only on GitHub Enterprise. Only accounts with write access
+# can start this workflow, which means the owner.
+#
+# Each part is skipped until its settings exist (docs/SETUP.md):
+# CLOUDFLARE_ACCOUNT_ID for the Workers, PREVIEW_SUPABASE_PROJECT_REF and
+# PROD_SUPABASE_PROJECT_REF for the databases.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      accepted:
+        description: "What the client accepted, and how (kept in the run's summary)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event_name }}
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    name: Staging
+    if: github.event_name == 'push' && vars.CLOUDFLARE_ACCOUNT_ID != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.PREVIEW_SUPABASE_DB_PASSWORD }}
+      PROJECT_REF: ${{ vars.PREVIEW_SUPABASE_PROJECT_REF }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.PREVIEW_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.PREVIEW_SUPABASE_ANON_KEY }}
+      NEXT_PUBLIC_SITE_URL: ${{ vars.PREVIEW_SITE_URL }}
+      NEXT_TELEMETRY_DISABLED: "1"
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # Built first: a build that fails leaves the database untouched.
+      - name: Build the Worker
+        run: npx opennextjs-cloudflare build
+      - name: Migrate the preview database
+        if: env.PROJECT_REF != ''
+        run: |
+          npx supabase link --project-ref "$PROJECT_REF"
+          npx supabase db push --remote --yes
+      - name: Deploy the staging site
+        run: npx opennextjs-cloudflare deploy --env preview
+      - name: Check it answers
+        if: env.NEXT_PUBLIC_SITE_URL != ''
+        run: curl --fail --silent --show-error --retry 5 --retry-delay 5 --retry-all-errors "$NEXT_PUBLIC_SITE_URL/api/health"
+
+  production:
+    name: Production
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && vars.CLOUDFLARE_ACCOUNT_ID != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      checks: read
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.PROD_SUPABASE_DB_PASSWORD }}
+      PROJECT_REF: ${{ vars.PROD_SUPABASE_PROJECT_REF }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.PROD_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.PROD_SUPABASE_ANON_KEY }}
+      NEXT_PUBLIC_SITE_URL: ${{ vars.PROD_SITE_URL }}
+      NEXT_TELEMETRY_DISABLED: "1"
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - name: Record what the client accepted
+        run: |
+          {
+            echo "## Production release"
+            echo
+            echo "Commit: \`$GITHUB_SHA\`, started by $GITHUB_ACTOR."
+            echo
+            echo "Accepted: $ACCEPTED"
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          ACCEPTED: ${{ inputs.accepted }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: CI passed on this commit
+        run: node scripts/ci-passed.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+      - run: npm ci
+      - name: Build the Worker
+        run: npx opennextjs-cloudflare build
+      - name: Pending migrations
+        id: pending
+        if: env.PROJECT_REF != ''
+        run: |
+          npx supabase link --project-ref "$PROJECT_REF"
+          npx supabase migration list --remote
+          echo "any=$(bash scripts/backup.sh pending --remote)" >> "$GITHUB_OUTPUT"
+      - name: Back up the live data first
+        if: steps.pending.outputs.any == 'true' && vars.BACKUP_PUBLIC_KEY != ''
+        run: bash scripts/backup.sh encrypted backup --remote
+        env:
+          BACKUP_PUBLIC_KEY: ${{ vars.BACKUP_PUBLIC_KEY }}
+      # Only encrypted files: the script refuses to finish with anything else in this folder.
+      - name: Keep the backup for 90 days
+        if: steps.pending.outputs.any == 'true' && vars.BACKUP_PUBLIC_KEY != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: data-before-${{ github.sha }}
+          path: backup/*.gpg
+          if-no-files-found: error
+          retention-days: 90
+      - name: Say that these migrations run without a backup
+        if: steps.pending.outputs.any == 'true' && vars.BACKUP_PUBLIC_KEY == ''
+        run: echo "::warning title=No backup before migrating::Set BACKUP_PUBLIC_KEY (docs/SETUP.md) to keep a copy of the live data before each migration."
+      # Runs only when every step above passed: a failed backup stops the migration.
+      - name: Apply the migrations
+        if: steps.pending.outputs.any == 'true'
+        run: npx supabase db push --remote --yes
+      - name: Deploy the live site
+        run: npx opennextjs-cloudflare deploy
+      - name: Check it answers
+        if: env.NEXT_PUBLIC_SITE_URL != ''
+        run: curl --fail --silent --show-error --retry 5 --retry-delay 5 --retry-all-errors "$NEXT_PUBLIC_SITE_URL/api/health"
