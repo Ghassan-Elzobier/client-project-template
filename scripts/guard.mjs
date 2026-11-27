@@ -32,7 +32,15 @@ const atBase = (path) => {
   }
 };
 
-const mergeBase = git("merge-base", base, "HEAD");
+let mergeBase;
+try {
+  mergeBase = git("merge-base", base, "HEAD");
+} catch {
+  // A fresh clone may have no remote-tracking branch for the base yet.
+  console.error(`Guard: can't find ${base} to compare against. Fetch it first:`);
+  console.error("  git fetch origin +refs/heads/main:refs/remotes/origin/main");
+  process.exit(2);
+}
 // Status letter and path(s) of every file changed since the branch left base.
 const changes = git("diff", "--name-status", "--find-renames", mergeBase)
   .split("\n")

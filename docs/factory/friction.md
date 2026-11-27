@@ -10,3 +10,5 @@ Format: `- YYYY-MM-DD · area · what happened · what would have prevented it (
 ## Open
 
 ## Done
+
+- 2026-11-27 · guard · `npm run guard` died with a stack trace in a fresh clone of a client repository, because `origin/main` had not been fetched · the guard now names the missing ref and the command that fetches it

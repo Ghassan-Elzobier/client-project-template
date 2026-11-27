@@ -57,6 +57,7 @@ Ideas worth raising with the client. Nothing here is built until it moves up.
 - What the app stores: TODO
 - Personal data: TODO(ask): none, or whose (editors' emails, visitors' names), why it is needed, and how long it is kept
 - Where the client's existing data comes from: TODO(ask): a spreadsheet, documents; kept in `client-files/`, never committed
+- Rights in that content: TODO(ask): is it all the client's own work? Material copied from published sources (a glossary, a dictionary, a report) can be protected as a text or as a database, so it stays private to the client until its licence is checked
 - Third parties the browser may contact: none (the security policy blocks everything else)
 - Cookies: sign-in only, for the people who run the site
 
